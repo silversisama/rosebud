@@ -1355,3 +1355,15 @@ static const struct SpriteFrameImage sPicTable_KirliaOld[] = {
 static const struct SpriteFrameImage sPicTable_RubySapphireMay[] = {
     overworld_ascending_frames(gObjectEventPic_RubySapphireMayNormal, 2, 4),
 };
+
+static const struct SpriteFrameImage sPicTable_Zorua[] = {
+    overworld_frame(gObjectEventPic_Zorua, 2, 2, 0),
+    overworld_frame(gObjectEventPic_Zorua, 2, 2, 2),
+    overworld_frame(gObjectEventPic_Zorua, 2, 2, 4),
+    overworld_frame(gObjectEventPic_Zorua, 2, 2, 1),
+    overworld_frame(gObjectEventPic_Zorua, 2, 2, 1),
+    overworld_frame(gObjectEventPic_Zorua, 2, 2, 3),
+    overworld_frame(gObjectEventPic_Zorua, 2, 2, 3),
+    overworld_frame(gObjectEventPic_Zorua, 2, 2, 5),
+    overworld_frame(gObjectEventPic_Zorua, 2, 2, 5),
+};
