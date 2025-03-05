@@ -4430,6 +4430,16 @@
       "secondary_tileset": "gTileset_BrendansMaysHouse",
       "border_filepath": "data/layouts/PlayerHouse_2F/border.bin",
       "blockdata_filepath": "data/layouts/PlayerHouse_2F/map.bin"
+    },
+    {
+      "id": "LAYOUT_VELVET_ROOM",
+      "name": "VelvetRoom_Layout",
+      "width": 21,
+      "height": 15,
+      "primary_tileset": "gTileset_VelvetRoom",
+      "secondary_tileset": "gTileset_Petalburg",
+      "border_filepath": "data/layouts/VelvetRoom/border.bin",
+      "blockdata_filepath": "data/layouts/VelvetRoom/map.bin"
     }
   ]
 }

@@ -3,7 +3,16 @@
 
 PlayerHouse_1F_MapScripts::
 	map_script MAP_SCRIPT_ON_LOAD, PlayerHouse_1F_MomwatchingTV
+	map_script MAP_SCRIPT_ON_TRANSITION, HideTheZorua
 	.byte 0
+
+
+
+HideTheZorua::
+	setflag FLAG_TEMP_7
+	setflag FLAG_TEMP_6
+	setflag FLAG_TEMP_5
+
 
 PlayerHouse_1F_MomwatchingTV::
 	special TurnOnTVScreen
@@ -44,7 +53,7 @@ ReplyToMorgan1:
 	.string "Should I reply to his text?$"
 
 MomWatchingDrama:
-	.string "Mom's watching a drama show\p"
+	.string "Mom's watching a drama show.\p"
 	.string "She's completely engrossed.$"
 
 ConfirmMorgan:
@@ -53,3 +62,4 @@ ConfirmMorgan:
 
 AzuBeAzuing:
 	.string "Azu! Azu!$"
+
