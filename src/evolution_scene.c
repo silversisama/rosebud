@@ -19,6 +19,7 @@
 #include "pokedex.h"
 #include "pokemon.h"
 #include "pokemon_summary_screen.h"
+#include "pokemon_storage_system.h"
 #include "scanline_effect.h"
 #include "sound.h"
 #include "sprite.h"
@@ -542,7 +543,7 @@ static void CB2_TradeEvolutionSceneUpdate(void)
     RunTasks();
 }
 
-static void CreateShedinja(u32 preEvoSpecies, u32 postEvoSpecies, struct Pokemon *mon)
+static void HandleAdditionalEvolutionEffects(u32 preEvoSpecies, u32 postEvoSpecies, struct Pokemon *mon)
 {
     u32 data = 0;
     u16 ball = ITEM_POKE_BALL;
@@ -553,6 +554,7 @@ static void CreateShedinja(u32 preEvoSpecies, u32 postEvoSpecies, struct Pokemon
 
     for (u32 i = 0; evolutions[i].method != EVOLUTIONS_END; i++)
     {
+        // Create Shedinja
         if (evolutions[i].method == EVO_SPLIT_FROM_EVO
          && evolutions[i].param == postEvoSpecies
          && gPlayerPartyCount < PARTY_SIZE
@@ -591,6 +593,23 @@ static void CreateShedinja(u32 preEvoSpecies, u32 postEvoSpecies, struct Pokemon
                 && GetMonData(shedinja, MON_DATA_LANGUAGE) == LANGUAGE_JAPANESE
                 && GetMonData(mon, MON_DATA_SPECIES) == SPECIES_NINJASK)
                     SetMonData(shedinja, MON_DATA_NICKNAME, sText_ShedinjaJapaneseName);
+
+        } else if (evolutions[i].method == EVO_FUSE_TOGETHER) {
+            u32 j;
+            u16 requiredPokemon = SPECIES_NONE;
+            for (j = 0; evolutions[i].params != NULL && evolutions[i].params[j].condition != CONDITIONS_END; j++) {
+                if (evolutions[i].params[j].condition == IF_FUSION_MATERIAL)
+                    requiredPokemon = evolutions[i].params[j].arg1;
+            }
+            for (j = 0; j < PARTY_SIZE; j++)
+            {
+                if (GetMonData(&gPlayerParty[j], MON_DATA_SPECIES) == requiredPokemon)
+                {
+                    ZeroMonData(&gPlayerParty[j]);
+                    CompactPartySlots();
+                    break;
+                }
+            }
 
         }
     }
@@ -829,7 +848,7 @@ static void Task_EvolutionScene(u8 taskId)
             }
 
             if (!gTasks[taskId].tEvoWasStopped)
-                CreateShedinja(gTasks[taskId].tPreEvoSpecies, gTasks[taskId].tPostEvoSpecies, mon);
+                HandleAdditionalEvolutionEffects(gTasks[taskId].tPreEvoSpecies, gTasks[taskId].tPostEvoSpecies, mon);
 
             DestroyTask(taskId);
             FreeMonSpritesGfx();

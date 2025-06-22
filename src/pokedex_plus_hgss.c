@@ -6525,6 +6525,7 @@ static void PrintEvolutionTargetSpeciesAndMethod(u8 taskId, u16 species, u8 dept
             break;
         case EVO_LEVEL:
         case EVO_LEVEL_BATTLE_ONLY:
+        case EVO_FUSE_TOGETHER:
             StringCopy(gStringVar4, COMPOUND_STRING("{LV}{UP_ARROW}"));
             if (evolutions[i].param > 1)
             {
@@ -6533,6 +6534,8 @@ static void PrintEvolutionTargetSpeciesAndMethod(u8 taskId, u16 species, u8 dept
             }
             if ((enum EvolutionMethods)evolutions[i].method == EVO_LEVEL_BATTLE_ONLY)
                 StringAppend(gStringVar4, COMPOUND_STRING(", in battle"));
+            if ((enum EvolutionMethods)evolutions[i].method == EVO_FUSE_TOGETHER)
+                StringAppend(gStringVar4, COMPOUND_STRING(", by fusion"));
             break;
         case EVO_TRADE:
             StringExpandPlaceholders(gStringVar4, COMPOUND_STRING("Trading"));
@@ -6764,6 +6767,11 @@ static void PrintEvolutionTargetSpeciesAndMethod(u8 taskId, u16 species, u8 dept
                 CopyItemNameHandlePlural(evolutions[i].params[j].arg1, gStringVar2, evolutions[i].params[j].arg2);
                 StringAppend(gStringVar4, gStringVar2);
                 StringAppend(gStringVar4, COMPOUND_STRING(" in bag"));
+                break;
+            // Custom
+            case IF_FUSION_MATERIAL:
+                StringAppend(gStringVar4, GetSpeciesName(evolutions[i].params[j].arg1)); //mon name
+                StringAppend(gStringVar4, COMPOUND_STRING(" as fusion partner"));
                 break;
             case CONDITIONS_END:
                 break;

@@ -4610,6 +4610,7 @@ bool32 DoesMonMeetAdditionalConditions(struct Pokemon *mon, const struct Evoluti
         }
         // Gen 4
         case IF_SPECIES_IN_PARTY:
+        case IF_FUSION_MATERIAL:
             for (j = 0; j < PARTY_SIZE; j++)
             {
                 if (GetMonData(&gPlayerParty[j], MON_DATA_SPECIES, NULL) == params[i].arg1)
@@ -4835,6 +4836,7 @@ u32 GetEvolutionTargetSpecies(struct Pokemon *mon, enum EvolutionMode mode, u16 
             switch (evolutions[i].method)
             {
             case EVO_LEVEL:
+            case EVO_FUSE_TOGETHER:
                 if (evolutions[i].param <= level)
                     conditionsMet = TRUE;
                 break;
