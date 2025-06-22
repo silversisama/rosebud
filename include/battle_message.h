@@ -265,8 +265,11 @@ extern const u8 *const gRefereeStringsTable[];
 extern const u8 *const gRoundsStringTable[];
 
 extern const u8 gText_PkmnIsEvolving[];
+extern const u8 gText_PkmnAreFusing[];
 extern const u8 gText_CongratsPkmnEvolved[];
+extern const u8 gText_CongratsPkmnFused[];
 extern const u8 gText_PkmnStoppedEvolving[];
+extern const u8 gText_PkmnStoppedFusing[];
 extern const u8 gText_EllipsisQuestionMark[];
 extern const u8 gText_WhatWillPkmnDo[];
 extern const u8 gText_WhatWillPkmnDo2[];

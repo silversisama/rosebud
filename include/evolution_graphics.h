@@ -9,5 +9,6 @@ u8 EvolutionSparkles_CircleInward(void);
 u8 EvolutionSparkles_SprayAndFlash(u16 species);
 u8 EvolutionSparkles_SprayAndFlash_Trade(u16 species);
 u8 CycleEvolutionMonSprite(u8 preEvoSpriteId, u8 postEvoSpriteId);
+u8 CycleFusionMonSprite(u8 preEvoSpriteId, u8 postEvoSpriteId, u8 fusionMaterialSpriteId);
 
 #endif // GUARD_EVOLUTION_GRAPHICS_H

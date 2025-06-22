@@ -1403,8 +1403,11 @@ const u16 gDamageNonTypesDmgStringIds[] =
 };
 
 const u8 gText_PkmnIsEvolving[] = _("What?\n{STR_VAR_1} is evolving!");
+const u8 gText_PkmnAreFusing[] = _("What?\n{STR_VAR_1} and {STR_VAR_3} are fusing!");
 const u8 gText_CongratsPkmnEvolved[] = _("Congratulations! Your {STR_VAR_1}\nevolved into {STR_VAR_2}!{WAIT_SE}\p");
+const u8 gText_CongratsPkmnFused[] = _("Your {STR_VAR_1} and {STR_VAR_3}\nfused into {STR_VAR_2}!{WAIT_SE}\p");
 const u8 gText_PkmnStoppedEvolving[] = _("Huh? {STR_VAR_1}\nstopped evolving!\p");
+const u8 gText_PkmnStoppedFusing[] = _("Huh? {STR_VAR_1} and {STR_VAR_3}\nstopped fusing!\p");
 const u8 gText_EllipsisQuestionMark[] = _("……?\p");
 const u8 gText_WhatWillPkmnDo[] = _("What will\n{B_BUFF1} do?");
 const u8 gText_WhatWillPkmnDo2[] = _("What will\n{B_PLAYER_NAME} do?");

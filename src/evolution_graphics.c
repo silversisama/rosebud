@@ -300,7 +300,8 @@ static void Task_Sparkles_SpiralUpward_Init(u8 taskId)
 {
     SetEvoSparklesMatrices();
     gTasks[taskId].tTimer = 0;
-    BeginNormalPaletteFade(3 << gTasks[taskId].tPalNum, 0xA, 0, 0x10, RGB_WHITE);
+    //BeginNormalPaletteFade(0xFF << 16, 0xA, 0, 0x10, RGB_WHITE);
+    BeginNormalPaletteFade(7 << (gTasks[taskId].tPalNum), 0xA, 0, 0x10, RGB_WHITE);
     gTasks[taskId].func = Task_Sparkles_SpiralUpward;
     PlaySE(SE_M_MEGA_KICK); // 'Charging up' sound for the sparkles as they spiral upwards
 }
@@ -515,16 +516,19 @@ static void SpriteCB_EvolutionMonSprite(struct Sprite *sprite)
 
 }
 
-#define tPreEvoSpriteId     data[1]
-#define tPostEvoSpriteId    data[2]
-#define tPreEvoScale        data[3]
-#define tPostEvoScale       data[4]
-#define tShowingPostEvo     data[5]
-#define tScaleSpeed         data[6]
-#define tEvoStopped         data[8]
+#define tPreEvoSpriteId             data[1]
+#define tPostEvoSpriteId            data[2]
+#define tPreEvoScale                data[3]
+#define tPostEvoScale               data[4]
+#define tShowingPostEvo             data[5]
+#define tScaleSpeed                 data[6]
+#define tEvoStopped                 data[8]
+#define tIsFusion                   data[9]
+#define tFusionMaterialSpriteId     data[10]
 
-#define MATRIX_PRE_EVO  30
-#define MATRIX_POST_EVO 31
+#define MATRIX_FUSION_MATERIAL  29
+#define MATRIX_PRE_EVO          30
+#define MATRIX_POST_EVO         31
 
 #define MON_MAX_SCALE 256
 #define MON_MIN_SCALE 16
@@ -563,6 +567,29 @@ u8 CycleEvolutionMonSprite(u8 preEvoSpriteId, u8 postEvoSpriteId)
     CpuSet(monPalette, &gPlttBufferFaded[OBJ_PLTT_ID(gSprites[postEvoSpriteId].oam.paletteNum)], 16);
 
     gTasks[taskId].tEvoStopped = FALSE;
+    gTasks[taskId].tIsFusion = FALSE;
+    return taskId;
+}
+
+u8 CycleFusionMonSprite(u8 preEvoSpriteId, u8 postEvoSpriteId, u8 fusionMaterialSpriteId)
+{   
+    u16 i;
+    u16 monPalette[16];
+    u8 taskId;
+
+    taskId = CycleEvolutionMonSprite(preEvoSpriteId, postEvoSpriteId);
+    gTasks[taskId].tIsFusion = TRUE;
+    gTasks[taskId].tFusionMaterialSpriteId = fusionMaterialSpriteId;
+
+    for (i = 0; i < ARRAY_COUNT(monPalette); i++)
+        monPalette[i] = RGB_WHITE;
+
+    gSprites[fusionMaterialSpriteId].callback = SpriteCB_EvolutionMonSprite;
+    gSprites[fusionMaterialSpriteId].oam.affineMode = ST_OAM_AFFINE_NORMAL;
+    gSprites[fusionMaterialSpriteId].oam.matrixNum = MATRIX_FUSION_MATERIAL;
+    gSprites[fusionMaterialSpriteId].invisible = FALSE;
+    CpuSet(monPalette, &gPlttBufferFaded[OBJ_PLTT_ID(gSprites[fusionMaterialSpriteId].oam.paletteNum)], 16);
+    
     return taskId;
 }
 
@@ -602,6 +629,7 @@ static void Task_CycleEvolutionMonSprite_UpdateSize(u8 taskId)
     else
     {
         u16 oamMatrixArg;
+        u16 xOffset;
         u8 numSpritesFinished = 0;
         if (!gTasks[taskId].tShowingPostEvo)
         {
@@ -651,15 +679,23 @@ static void Task_CycleEvolutionMonSprite_UpdateSize(u8 taskId)
                 numSpritesFinished++;
             }
         }
-
+   
         // Grow/shrink pre-evo sprite
         oamMatrixArg = 65536 / gTasks[taskId].tPreEvoScale;
-        SetOamMatrix(MATRIX_PRE_EVO, oamMatrixArg, 0, 0, oamMatrixArg);
+        if (gTasks[taskId].tIsFusion) {
+            xOffset = (128 - gTasks[taskId].tScaleSpeed) / 3;
+            gSprites[gTasks[taskId].tPreEvoSpriteId].x = 120 - xOffset;
+            gSprites[gTasks[taskId].tFusionMaterialSpriteId].x = 120 + xOffset;
+            SetOamMatrix(MATRIX_FUSION_MATERIAL, oamMatrixArg, 0, 0, oamMatrixArg);
+            SetOamMatrix(MATRIX_PRE_EVO, -1 * oamMatrixArg, 0, 0, oamMatrixArg);
+        } else {
+            SetOamMatrix(MATRIX_PRE_EVO, oamMatrixArg, 0, 0, oamMatrixArg);
+        }
 
         // Grow/shrink post-evo sprite
         oamMatrixArg = 65536 / gTasks[taskId].tPostEvoScale;
         SetOamMatrix(MATRIX_POST_EVO, oamMatrixArg, 0, 0, oamMatrixArg);
-
+        
         // Both sprites have reached their size extreme
         if (numSpritesFinished == 2)
             gTasks[taskId].func = Task_CycleEvolutionMonSprite_TryEnd;
@@ -671,6 +707,12 @@ static void EndOnPostEvoMon(u8 taskId)
     gSprites[gTasks[taskId].tPreEvoSpriteId].oam.affineMode = ST_OAM_AFFINE_OFF;
     gSprites[gTasks[taskId].tPreEvoSpriteId].oam.matrixNum = 0;
     gSprites[gTasks[taskId].tPreEvoSpriteId].invisible = TRUE;
+
+    if (gTasks[taskId].tIsFusion) {
+        gSprites[gTasks[taskId].tFusionMaterialSpriteId].oam.affineMode = ST_OAM_AFFINE_OFF;
+        gSprites[gTasks[taskId].tFusionMaterialSpriteId].oam.matrixNum = 0;
+        gSprites[gTasks[taskId].tFusionMaterialSpriteId].invisible = TRUE;
+    }
 
     gSprites[gTasks[taskId].tPostEvoSpriteId].oam.affineMode = ST_OAM_AFFINE_OFF;
     gSprites[gTasks[taskId].tPostEvoSpriteId].oam.matrixNum = 0;
@@ -684,6 +726,14 @@ static void EndOnPreEvoMon(u8 taskId)
     gSprites[gTasks[taskId].tPreEvoSpriteId].oam.affineMode = ST_OAM_AFFINE_OFF;
     gSprites[gTasks[taskId].tPreEvoSpriteId].oam.matrixNum = 0;
     gSprites[gTasks[taskId].tPreEvoSpriteId].invisible = FALSE;
+
+    if (gTasks[taskId].tIsFusion) {
+        gSprites[gTasks[taskId].tFusionMaterialSpriteId].oam.affineMode = ST_OAM_AFFINE_OFF;
+        gSprites[gTasks[taskId].tFusionMaterialSpriteId].oam.matrixNum = 0;
+        gSprites[gTasks[taskId].tFusionMaterialSpriteId].invisible = FALSE;
+        gSprites[gTasks[taskId].tPreEvoSpriteId].oam.matrixNum = 19;
+        gSprites[gTasks[taskId].tPreEvoSpriteId].oam.affineMode = ST_OAM_AFFINE_NORMAL;
+    }
 
     gSprites[gTasks[taskId].tPostEvoSpriteId].oam.affineMode = ST_OAM_AFFINE_OFF;
     gSprites[gTasks[taskId].tPostEvoSpriteId].oam.matrixNum = 0;

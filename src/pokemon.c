@@ -4804,6 +4804,7 @@ u32 GetEvolutionTargetSpecies(struct Pokemon *mon, enum EvolutionMode mode, u16 
     u32 holdEffect;
     const struct Evolution *evolutions = GetSpeciesEvolutions(species);
 
+    mon->box.unused_1E = 0;
     if (evolutions == NULL)
         return SPECIES_NONE;
 
@@ -4848,6 +4849,8 @@ u32 GetEvolutionTargetSpecies(struct Pokemon *mon, enum EvolutionMode mode, u16 
 
             if (conditionsMet && DoesMonMeetAdditionalConditions(mon, evolutions[i].params, NULL, PARTY_SIZE, canStopEvo, evoState))
             {
+                if (evolutions[i].method == EVO_FUSE_TOGETHER)
+                    mon->box.unused_1E = 1;
                 // All checks passed, so stop checking the rest of the evolutions.
                 // This is different from vanilla where the loop continues.
                 // If you have overlapping evolutions, put the ones you want to happen first on top of the list.
