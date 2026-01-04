@@ -6579,6 +6579,7 @@ static void PrintEvolutionTargetSpeciesAndMethod(u8 taskId, u16 species, u8 dept
             switch ((enum EvolutionMethods)evolutions[i].method)
             {
             case EVO_SCRIPT_TRIGGER:
+            case EVO_FUSE_TOGETHER:
             case EVO_NONE:
                 StringExpandPlaceholders(gStringVar4, COMPOUND_STRING("Unknown"));
                 break;
@@ -6751,6 +6752,7 @@ static void PrintEvolutionTargetSpeciesAndMethod(u8 taskId, u16 species, u8 dept
                     StringAppend(gStringVar4, COMPOUND_STRING(" move"));
                     break;
                 case IF_REGION:
+                case IF_FUSION_MATERIAL:
                 case IF_NOT_REGION:
                 {
                     if (condition == IF_REGION)

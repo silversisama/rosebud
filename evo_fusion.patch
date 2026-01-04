@@ -1,0 +1,621 @@
+From 3be72eb23a6885f92430ae8ac88e07c1f1709a01 Mon Sep 17 00:00:00 2001
+From: Jamie Foster <jamiefosterandco@gmail.com>
+Date: Sun, 22 Jun 2025 07:29:33 +0200
+Subject: [PATCH 1/2] Allows Pokemon to evolve by fusing with another Pokemon
+
+---
+ include/constants/pokemon.h |  5 ++++-
+ src/evolution_scene.c       | 23 +++++++++++++++++++++--
+ src/pokedex_plus_hgss.c     |  8 ++++++++
+ src/pokemon.c               |  2 ++
+ 4 files changed, 35 insertions(+), 3 deletions(-)
+
+diff --git a/include/constants/pokemon.h b/include/constants/pokemon.h
+index 659193861c..5bfb669fc9 100644
+--- a/include/constants/pokemon.h
++++ b/include/constants/pokemon.h
+@@ -291,6 +291,8 @@ enum EvolutionConditions {
+     IF_PID_MODULO_100_LT,               // The Pokémon's personality value's modulo by 100 is lower than the defined value.
+     IF_MIN_OVERWORLD_STEPS,             // The Player has taken a specific amount of steps in the overworld with the Pokémon following them or in the first slot of the party.
+     IF_BAG_ITEM_COUNT,                  // The Player has the specific amount of an item in the bag. It then removes those items.
++    // Custom
++    IF_FUSION_MATERIAL,
+     CONDITIONS_END
+ };
+ 
+@@ -303,7 +305,8 @@ enum EvolutionMethods {
+     EVO_SCRIPT_TRIGGER,         // Player interacts with an overworld trigger
+     EVO_LEVEL_BATTLE_ONLY,      // Pokémon reaches the specified level, in battle only
+     EVO_BATTLE_END,             // Battle ends, doesn't need to level up
+-    EVO_SPIN                    // The player spins in the overworld
++    EVO_SPIN,                   // The player spins in the overworld
++    EVO_FUSE_TOGETHER           // Normal evolution but requires a second pokemon of specific species in party as fusion
+ };
+ 
+ enum EvolutionMode {
+diff --git a/src/evolution_scene.c b/src/evolution_scene.c
+index d0dbb688fa..c96d339f0e 100644
+--- a/src/evolution_scene.c
++++ b/src/evolution_scene.c
+@@ -19,6 +19,7 @@
+ #include "pokedex.h"
+ #include "pokemon.h"
+ #include "pokemon_summary_screen.h"
++#include "pokemon_storage_system.h"
+ #include "scanline_effect.h"
+ #include "sound.h"
+ #include "sprite.h"
+@@ -542,7 +543,7 @@ static void CB2_TradeEvolutionSceneUpdate(void)
+     RunTasks();
+ }
+ 
+-static void CreateShedinja(u32 preEvoSpecies, u32 postEvoSpecies, struct Pokemon *mon)
++static void HandleAdditionalEvolutionEffects(u32 preEvoSpecies, u32 postEvoSpecies, struct Pokemon *mon)
+ {
+     u32 data = 0;
+     u16 ball = ITEM_POKE_BALL;
+@@ -553,6 +554,7 @@ static void CreateShedinja(u32 preEvoSpecies, u32 postEvoSpecies, struct Pokemon
+ 
+     for (u32 i = 0; evolutions[i].method != EVOLUTIONS_END; i++)
+     {
++        // Create Shedinja
+         if (evolutions[i].method == EVO_SPLIT_FROM_EVO
+          && evolutions[i].param == postEvoSpecies
+          && gPlayerPartyCount < PARTY_SIZE
+@@ -592,6 +594,23 @@ static void CreateShedinja(u32 preEvoSpecies, u32 postEvoSpecies, struct Pokemon
+                 && GetMonData(mon, MON_DATA_SPECIES) == SPECIES_NINJASK)
+                     SetMonData(shedinja, MON_DATA_NICKNAME, sText_ShedinjaJapaneseName);
+ 
++        } else if (evolutions[i].method == EVO_FUSE_TOGETHER) {
++            u32 j;
++            u16 requiredPokemon = SPECIES_NONE;
++            for (j = 0; evolutions[i].params != NULL && evolutions[i].params[j].condition != CONDITIONS_END; j++) {
++                if (evolutions[i].params[j].condition == IF_FUSION_MATERIAL)
++                    requiredPokemon = evolutions[i].params[j].arg1;
++            }
++            for (j = 0; j < PARTY_SIZE; j++)
++            {
++                if (GetMonData(&gPlayerParty[j], MON_DATA_SPECIES) == requiredPokemon)
++                {
++                    ZeroMonData(&gPlayerParty[j]);
++                    CompactPartySlots();
++                    break;
++                }
++            }
++
+         }
+     }
+ }
+@@ -829,7 +848,7 @@ static void Task_EvolutionScene(u8 taskId)
+             }
+ 
+             if (!gTasks[taskId].tEvoWasStopped)
+-                CreateShedinja(gTasks[taskId].tPreEvoSpecies, gTasks[taskId].tPostEvoSpecies, mon);
++                HandleAdditionalEvolutionEffects(gTasks[taskId].tPreEvoSpecies, gTasks[taskId].tPostEvoSpecies, mon);
+ 
+             DestroyTask(taskId);
+             FreeMonSpritesGfx();
+diff --git a/src/pokedex_plus_hgss.c b/src/pokedex_plus_hgss.c
+index 6541e9d3a7..b9bd1fa9b5 100644
+--- a/src/pokedex_plus_hgss.c
++++ b/src/pokedex_plus_hgss.c
+@@ -6525,6 +6525,7 @@ static void PrintEvolutionTargetSpeciesAndMethod(u8 taskId, u16 species, u8 dept
+             break;
+         case EVO_LEVEL:
+         case EVO_LEVEL_BATTLE_ONLY:
++        case EVO_FUSE_TOGETHER:
+             StringCopy(gStringVar4, COMPOUND_STRING("{LV}{UP_ARROW}"));
+             if (evolutions[i].param > 1)
+             {
+@@ -6533,6 +6534,8 @@ static void PrintEvolutionTargetSpeciesAndMethod(u8 taskId, u16 species, u8 dept
+             }
+             if ((enum EvolutionMethods)evolutions[i].method == EVO_LEVEL_BATTLE_ONLY)
+                 StringAppend(gStringVar4, COMPOUND_STRING(", in battle"));
++            if ((enum EvolutionMethods)evolutions[i].method == EVO_FUSE_TOGETHER)
++                StringAppend(gStringVar4, COMPOUND_STRING(", by fusion"));
+             break;
+         case EVO_TRADE:
+             StringExpandPlaceholders(gStringVar4, COMPOUND_STRING("Trading"));
+@@ -6765,6 +6768,11 @@ static void PrintEvolutionTargetSpeciesAndMethod(u8 taskId, u16 species, u8 dept
+                 StringAppend(gStringVar4, gStringVar2);
+                 StringAppend(gStringVar4, COMPOUND_STRING(" in bag"));
+                 break;
++            // Custom
++            case IF_FUSION_MATERIAL:
++                StringAppend(gStringVar4, GetSpeciesName(evolutions[i].params[j].arg1)); //mon name
++                StringAppend(gStringVar4, COMPOUND_STRING(" as fusion partner"));
++                break;
+             case CONDITIONS_END:
+                 break;
+             }
+diff --git a/src/pokemon.c b/src/pokemon.c
+index 6636c7c7fa..3f93ba7563 100644
+--- a/src/pokemon.c
++++ b/src/pokemon.c
+@@ -4610,6 +4610,7 @@ bool32 DoesMonMeetAdditionalConditions(struct Pokemon *mon, const struct Evoluti
+         }
+         // Gen 4
+         case IF_SPECIES_IN_PARTY:
++        case IF_FUSION_MATERIAL:
+             for (j = 0; j < PARTY_SIZE; j++)
+             {
+                 if (GetMonData(&gPlayerParty[j], MON_DATA_SPECIES, NULL) == params[i].arg1)
+@@ -4835,6 +4836,7 @@ u32 GetEvolutionTargetSpecies(struct Pokemon *mon, enum EvolutionMode mode, u16
+             switch (evolutions[i].method)
+             {
+             case EVO_LEVEL:
++            case EVO_FUSE_TOGETHER:
+                 if (evolutions[i].param <= level)
+                     conditionsMet = TRUE;
+                 break;
+-- 
+2.39.2 (Apple Git-143)
+
+
+From 3908c6ffbc16653b3f2536dadf3f87b5ad4ec6c0 Mon Sep 17 00:00:00 2001
+From: Jamie Foster <jamiefosterandco@gmail.com>
+Date: Sun, 22 Jun 2025 14:52:15 +0200
+Subject: [PATCH 2/2] Add custom animation for evolution fusion
+
+---
+ include/battle_message.h     |   3 +
+ include/evolution_graphics.h |   1 +
+ src/battle_message.c         |   3 +
+ src/evolution_graphics.c     |  76 ++++++++++++++++++----
+ src/evolution_scene.c        | 121 ++++++++++++++++++++++++++++++++---
+ src/pokemon.c                |   3 +
+ 6 files changed, 184 insertions(+), 23 deletions(-)
+
+diff --git a/include/battle_message.h b/include/battle_message.h
+index e9b133b656..1d797a9adf 100644
+--- a/include/battle_message.h
++++ b/include/battle_message.h
+@@ -265,8 +265,11 @@ extern const u8 *const gRefereeStringsTable[];
+ extern const u8 *const gRoundsStringTable[];
+ 
+ extern const u8 gText_PkmnIsEvolving[];
++extern const u8 gText_PkmnAreFusing[];
+ extern const u8 gText_CongratsPkmnEvolved[];
++extern const u8 gText_CongratsPkmnFused[];
+ extern const u8 gText_PkmnStoppedEvolving[];
++extern const u8 gText_PkmnStoppedFusing[];
+ extern const u8 gText_EllipsisQuestionMark[];
+ extern const u8 gText_WhatWillPkmnDo[];
+ extern const u8 gText_WhatWillPkmnDo2[];
+diff --git a/include/evolution_graphics.h b/include/evolution_graphics.h
+index 52586fc4f5..ce9a5e780f 100644
+--- a/include/evolution_graphics.h
++++ b/include/evolution_graphics.h
+@@ -9,5 +9,6 @@ u8 EvolutionSparkles_CircleInward(void);
+ u8 EvolutionSparkles_SprayAndFlash(u16 species);
+ u8 EvolutionSparkles_SprayAndFlash_Trade(u16 species);
+ u8 CycleEvolutionMonSprite(u8 preEvoSpriteId, u8 postEvoSpriteId);
++u8 CycleFusionMonSprite(u8 preEvoSpriteId, u8 postEvoSpriteId, u8 fusionMaterialSpriteId);
+ 
+ #endif // GUARD_EVOLUTION_GRAPHICS_H
+diff --git a/src/battle_message.c b/src/battle_message.c
+index 78708d47d6..82aa95aad2 100644
+--- a/src/battle_message.c
++++ b/src/battle_message.c
+@@ -1403,8 +1403,11 @@ const u16 gDamageNonTypesDmgStringIds[] =
+ };
+ 
+ const u8 gText_PkmnIsEvolving[] = _("What?\n{STR_VAR_1} is evolving!");
++const u8 gText_PkmnAreFusing[] = _("What?\n{STR_VAR_1} and {STR_VAR_3} are fusing!");
+ const u8 gText_CongratsPkmnEvolved[] = _("Congratulations! Your {STR_VAR_1}\nevolved into {STR_VAR_2}!{WAIT_SE}\p");
++const u8 gText_CongratsPkmnFused[] = _("Your {STR_VAR_1} and {STR_VAR_3}\nfused into {STR_VAR_2}!{WAIT_SE}\p");
+ const u8 gText_PkmnStoppedEvolving[] = _("Huh? {STR_VAR_1}\nstopped evolving!\p");
++const u8 gText_PkmnStoppedFusing[] = _("Huh? {STR_VAR_1} and {STR_VAR_3}\nstopped fusing!\p");
+ const u8 gText_EllipsisQuestionMark[] = _("……?\p");
+ const u8 gText_WhatWillPkmnDo[] = _("What will\n{B_BUFF1} do?");
+ const u8 gText_WhatWillPkmnDo2[] = _("What will\n{B_PLAYER_NAME} do?");
+diff --git a/src/evolution_graphics.c b/src/evolution_graphics.c
+index 1568c18d5f..aacd3dbded 100644
+--- a/src/evolution_graphics.c
++++ b/src/evolution_graphics.c
+@@ -300,7 +300,8 @@ static void Task_Sparkles_SpiralUpward_Init(u8 taskId)
+ {
+     SetEvoSparklesMatrices();
+     gTasks[taskId].tTimer = 0;
+-    BeginNormalPaletteFade(3 << gTasks[taskId].tPalNum, 0xA, 0, 0x10, RGB_WHITE);
++    //BeginNormalPaletteFade(0xFF << 16, 0xA, 0, 0x10, RGB_WHITE);
++    BeginNormalPaletteFade(7 << (gTasks[taskId].tPalNum), 0xA, 0, 0x10, RGB_WHITE);
+     gTasks[taskId].func = Task_Sparkles_SpiralUpward;
+     PlaySE(SE_M_MEGA_KICK); // 'Charging up' sound for the sparkles as they spiral upwards
+ }
+@@ -515,16 +516,19 @@ static void SpriteCB_EvolutionMonSprite(struct Sprite *sprite)
+ 
+ }
+ 
+-#define tPreEvoSpriteId     data[1]
+-#define tPostEvoSpriteId    data[2]
+-#define tPreEvoScale        data[3]
+-#define tPostEvoScale       data[4]
+-#define tShowingPostEvo     data[5]
+-#define tScaleSpeed         data[6]
+-#define tEvoStopped         data[8]
++#define tPreEvoSpriteId             data[1]
++#define tPostEvoSpriteId            data[2]
++#define tPreEvoScale                data[3]
++#define tPostEvoScale               data[4]
++#define tShowingPostEvo             data[5]
++#define tScaleSpeed                 data[6]
++#define tEvoStopped                 data[8]
++#define tIsFusion                   data[9]
++#define tFusionMaterialSpriteId     data[10]
+ 
+-#define MATRIX_PRE_EVO  30
+-#define MATRIX_POST_EVO 31
++#define MATRIX_FUSION_MATERIAL  29
++#define MATRIX_PRE_EVO          30
++#define MATRIX_POST_EVO         31
+ 
+ #define MON_MAX_SCALE 256
+ #define MON_MIN_SCALE 16
+@@ -563,6 +567,29 @@ u8 CycleEvolutionMonSprite(u8 preEvoSpriteId, u8 postEvoSpriteId)
+     CpuSet(monPalette, &gPlttBufferFaded[OBJ_PLTT_ID(gSprites[postEvoSpriteId].oam.paletteNum)], 16);
+ 
+     gTasks[taskId].tEvoStopped = FALSE;
++    gTasks[taskId].tIsFusion = FALSE;
++    return taskId;
++}
++
++u8 CycleFusionMonSprite(u8 preEvoSpriteId, u8 postEvoSpriteId, u8 fusionMaterialSpriteId)
++{   
++    u16 i;
++    u16 monPalette[16];
++    u8 taskId;
++
++    taskId = CycleEvolutionMonSprite(preEvoSpriteId, postEvoSpriteId);
++    gTasks[taskId].tIsFusion = TRUE;
++    gTasks[taskId].tFusionMaterialSpriteId = fusionMaterialSpriteId;
++
++    for (i = 0; i < ARRAY_COUNT(monPalette); i++)
++        monPalette[i] = RGB_WHITE;
++
++    gSprites[fusionMaterialSpriteId].callback = SpriteCB_EvolutionMonSprite;
++    gSprites[fusionMaterialSpriteId].oam.affineMode = ST_OAM_AFFINE_NORMAL;
++    gSprites[fusionMaterialSpriteId].oam.matrixNum = MATRIX_FUSION_MATERIAL;
++    gSprites[fusionMaterialSpriteId].invisible = FALSE;
++    CpuSet(monPalette, &gPlttBufferFaded[OBJ_PLTT_ID(gSprites[fusionMaterialSpriteId].oam.paletteNum)], 16);
++    
+     return taskId;
+ }
+ 
+@@ -602,6 +629,7 @@ static void Task_CycleEvolutionMonSprite_UpdateSize(u8 taskId)
+     else
+     {
+         u16 oamMatrixArg;
++        u16 xOffset;
+         u8 numSpritesFinished = 0;
+         if (!gTasks[taskId].tShowingPostEvo)
+         {
+@@ -651,15 +679,23 @@ static void Task_CycleEvolutionMonSprite_UpdateSize(u8 taskId)
+                 numSpritesFinished++;
+             }
+         }
+-
++   
+         // Grow/shrink pre-evo sprite
+         oamMatrixArg = 65536 / gTasks[taskId].tPreEvoScale;
+-        SetOamMatrix(MATRIX_PRE_EVO, oamMatrixArg, 0, 0, oamMatrixArg);
++        if (gTasks[taskId].tIsFusion) {
++            xOffset = (128 - gTasks[taskId].tScaleSpeed) / 3;
++            gSprites[gTasks[taskId].tPreEvoSpriteId].x = 120 - xOffset;
++            gSprites[gTasks[taskId].tFusionMaterialSpriteId].x = 120 + xOffset;
++            SetOamMatrix(MATRIX_FUSION_MATERIAL, oamMatrixArg, 0, 0, oamMatrixArg);
++            SetOamMatrix(MATRIX_PRE_EVO, -1 * oamMatrixArg, 0, 0, oamMatrixArg);
++        } else {
++            SetOamMatrix(MATRIX_PRE_EVO, oamMatrixArg, 0, 0, oamMatrixArg);
++        }
+ 
+         // Grow/shrink post-evo sprite
+         oamMatrixArg = 65536 / gTasks[taskId].tPostEvoScale;
+         SetOamMatrix(MATRIX_POST_EVO, oamMatrixArg, 0, 0, oamMatrixArg);
+-
++        
+         // Both sprites have reached their size extreme
+         if (numSpritesFinished == 2)
+             gTasks[taskId].func = Task_CycleEvolutionMonSprite_TryEnd;
+@@ -672,6 +708,12 @@ static void EndOnPostEvoMon(u8 taskId)
+     gSprites[gTasks[taskId].tPreEvoSpriteId].oam.matrixNum = 0;
+     gSprites[gTasks[taskId].tPreEvoSpriteId].invisible = TRUE;
+ 
++    if (gTasks[taskId].tIsFusion) {
++        gSprites[gTasks[taskId].tFusionMaterialSpriteId].oam.affineMode = ST_OAM_AFFINE_OFF;
++        gSprites[gTasks[taskId].tFusionMaterialSpriteId].oam.matrixNum = 0;
++        gSprites[gTasks[taskId].tFusionMaterialSpriteId].invisible = TRUE;
++    }
++
+     gSprites[gTasks[taskId].tPostEvoSpriteId].oam.affineMode = ST_OAM_AFFINE_OFF;
+     gSprites[gTasks[taskId].tPostEvoSpriteId].oam.matrixNum = 0;
+     gSprites[gTasks[taskId].tPostEvoSpriteId].invisible = FALSE;
+@@ -685,6 +727,14 @@ static void EndOnPreEvoMon(u8 taskId)
+     gSprites[gTasks[taskId].tPreEvoSpriteId].oam.matrixNum = 0;
+     gSprites[gTasks[taskId].tPreEvoSpriteId].invisible = FALSE;
+ 
++    if (gTasks[taskId].tIsFusion) {
++        gSprites[gTasks[taskId].tFusionMaterialSpriteId].oam.affineMode = ST_OAM_AFFINE_OFF;
++        gSprites[gTasks[taskId].tFusionMaterialSpriteId].oam.matrixNum = 0;
++        gSprites[gTasks[taskId].tFusionMaterialSpriteId].invisible = FALSE;
++        gSprites[gTasks[taskId].tPreEvoSpriteId].oam.matrixNum = 19;
++        gSprites[gTasks[taskId].tPreEvoSpriteId].oam.affineMode = ST_OAM_AFFINE_NORMAL;
++    }
++
+     gSprites[gTasks[taskId].tPostEvoSpriteId].oam.affineMode = ST_OAM_AFFINE_OFF;
+     gSprites[gTasks[taskId].tPostEvoSpriteId].oam.matrixNum = 0;
+     gSprites[gTasks[taskId].tPostEvoSpriteId].invisible = TRUE;
+diff --git a/src/evolution_scene.c b/src/evolution_scene.c
+index c96d339f0e..446bec2653 100644
+--- a/src/evolution_scene.c
++++ b/src/evolution_scene.c
+@@ -40,6 +40,8 @@ struct EvoInfo
+ {
+     u8 preEvoSpriteId;
+     u8 postEvoSpriteId;
++    u8 fusionMaterialSpriteId;
++    u8 unused_alignement;
+     u8 evoTaskId;
+     u8 delayTimer;
+     u16 savedPalette[48];
+@@ -164,6 +166,8 @@ static void CB2_BeginEvolutionScene(void)
+ #define tLearnMoveNoState   data[8]
+ #define tEvoWasStopped      data[9]
+ #define tPartyId            data[10]
++#define tFusionEvo          data[11]
++#define tFusionMaterial     data[12]
+ 
+ #define TASK_BIT_CAN_STOP       (1 << 0)
+ #define TASK_BIT_LEARN_MOVE     (1 << 7)
+@@ -196,6 +200,35 @@ static void Task_BeginEvolutionScene(u8 taskId)
+     }
+ }
+ 
++static u8 getFusionPartner(u16 preEvoSpecies)
++{
++    const struct Evolution *evolutions = GetSpeciesEvolutions(preEvoSpecies);
++    u16 requiredPokemon;
++    u32 i, j;
++    if (evolutions == NULL)
++        return -1;
++
++    for (i = 0; evolutions[i].method != EVOLUTIONS_END; i++) {
++        if (evolutions[i].method == EVO_FUSE_TOGETHER) {
++            requiredPokemon = SPECIES_NONE;
++            for (j = 0; evolutions[i].params != NULL && evolutions[i].params[j].condition != CONDITIONS_END; j++) {
++                if (evolutions[i].params[j].condition == IF_FUSION_MATERIAL)
++                    requiredPokemon = evolutions[i].params[j].arg1;
++            }
++            if (requiredPokemon == SPECIES_NONE)
++                continue;
++            for (j = 0; j < PARTY_SIZE; j++)
++            {
++                if (GetMonData(&gPlayerParty[j], MON_DATA_SPECIES) == requiredPokemon)
++                {
++                    return j;
++                }
++            }
++        }
++    }
++    return -1;
++}
++
+ void BeginEvolutionScene(struct Pokemon *mon, u16 postEvoSpecies, bool8 canStopEvo, u8 partyId)
+ {
+     u8 taskId = CreateTask(Task_BeginEvolutionScene, 0);
+@@ -214,6 +247,18 @@ void EvolutionScene(struct Pokemon *mon, u16 postEvoSpecies, bool8 canStopEvo, u
+     bool32 isShiny;
+     u8 id;
+ 
++    u8 fusionId = -1;
++    u16 fusionSpecies = SPECIES_NONE;
++    struct Pokemon *mon2 = NULL;
++
++    currSpecies = GetMonData(mon, MON_DATA_SPECIES);
++    if (mon->box.unused_1E == 1) {
++        fusionId = getFusionPartner(currSpecies);
++        if (fusionId != -1) {
++            mon2 = &gPlayerParty[fusionId];
++            fusionSpecies = GetMonData(mon2, MON_DATA_SPECIES);
++        }
++    }
+     SetHBlankCallback(NULL);
+     SetVBlankCallback(NULL);
+     CpuFill32(0, (void *)(VRAM), VRAM_SIZE);
+@@ -256,15 +301,13 @@ void EvolutionScene(struct Pokemon *mon, u16 postEvoSpecies, bool8 canStopEvo, u
+     StringCopy(gStringVar2, GetSpeciesName(postEvoSpecies));
+ 
+     // preEvo sprite
+-    currSpecies = GetMonData(mon, MON_DATA_SPECIES);
+     isShiny = GetMonData(mon, MON_DATA_IS_SHINY);
+     personality = GetMonData(mon, MON_DATA_PERSONALITY);
+     LoadSpecialPokePic(gMonSpritesGfxPtr->spritesGfx[B_POSITION_OPPONENT_LEFT],
+                         currSpecies,
+                         personality,
+                         TRUE);
+-    LoadPalette(GetMonSpritePalFromSpeciesAndPersonality(currSpecies, isShiny, personality), OBJ_PLTT_ID(1), PLTT_SIZE_4BPP);
+-
++    LoadPalette(GetMonSpritePalFromSpeciesAndPersonality(currSpecies, isShiny, personality), OBJ_PLTT_ID(1), PLTT_SIZE_4BPP);    
+     SetMultiuseSpriteTemplateToPokemon(currSpecies, B_POSITION_OPPONENT_LEFT);
+     gMultiuseSpriteTemplate.affineAnims = gDummySpriteAffineAnimTable;
+     sEvoStructPtr->preEvoSpriteId = id = CreateSprite(&gMultiuseSpriteTemplate, 120, 64, 30);
+@@ -273,6 +316,33 @@ void EvolutionScene(struct Pokemon *mon, u16 postEvoSpecies, bool8 canStopEvo, u
+     gSprites[id].oam.paletteNum = 1;
+     gSprites[id].invisible = TRUE;
+ 
++
++    if (fusionSpecies) {
++        // fusionMaterial name
++        gSprites[id].x = 80;
++        gSprites[id].oam.affineMode = ST_OAM_AFFINE_NORMAL;
++        gSprites[id].oam.matrixNum = 19;
++        SetOamMatrix(19, -256, 0, 0, 256);
++        GetMonData(mon2, MON_DATA_NICKNAME, name);
++        StringCopy_Nickname(gStringVar3, name);
++
++        // fusionMaterial sprite
++        isShiny = GetMonData(mon2, MON_DATA_IS_SHINY);
++        personality = GetMonData(mon2, MON_DATA_PERSONALITY);
++        LoadSpecialPokePic(gMonSpritesGfxPtr->spritesGfx[B_POSITION_PLAYER_LEFT],
++                            fusionSpecies,
++                            personality,
++                            TRUE);
++        LoadPalette(GetMonSpritePalFromSpeciesAndPersonality(fusionSpecies, isShiny, personality), OBJ_PLTT_ID(3), PLTT_SIZE_4BPP);
++        SetMultiuseSpriteTemplateToPokemon(fusionSpecies, B_POSITION_PLAYER_LEFT);
++        gMultiuseSpriteTemplate.affineAnims = gDummySpriteAffineAnimTable;
++        sEvoStructPtr->fusionMaterialSpriteId = id = CreateSprite(&gMultiuseSpriteTemplate, 160, 64, 31);
++
++        gSprites[id].callback = SpriteCallbackDummy_2;
++        gSprites[id].oam.paletteNum = 3;
++        gSprites[id].invisible = TRUE;
++    }
++
+     // postEvo sprite
+     LoadSpecialPokePic(gMonSpritesGfxPtr->spritesGfx[B_POSITION_OPPONENT_RIGHT],
+                         postEvoSpecies,
+@@ -297,6 +367,11 @@ void EvolutionScene(struct Pokemon *mon, u16 postEvoSpecies, bool8 canStopEvo, u
+     gTasks[id].tLearnsFirstMove = TRUE;
+     gTasks[id].tEvoWasStopped = FALSE;
+     gTasks[id].tPartyId = partyId;
++    if (fusionSpecies) {
++        gTasks[id].tFusionEvo = TRUE;
++        gTasks[id].tFusionMaterial = fusionId;
++    } else         
++        gTasks[id].tFusionEvo = FALSE;
+ 
+     memcpy(&sEvoStructPtr->savedPalette, &gPlttBufferUnfaded[BG_PLTT_ID(2)], sizeof(sEvoStructPtr->savedPalette));
+ 
+@@ -666,7 +741,10 @@ static void Task_EvolutionScene(u8 taskId)
+ {
+     u32 var;
+     struct Pokemon *mon = &gPlayerParty[gTasks[taskId].tPartyId];
++    struct Pokemon *mon2 = NULL;
+ 
++    if (gTasks[taskId].tFusionEvo)
++        mon2 = &gPlayerParty[gTasks[taskId].tFusionMaterial];
+     // check if B Button was held, so the evolution gets stopped
+     if (gMain.heldKeys == B_BUTTON
+         && gTasks[taskId].tState == EVOSTATE_WAIT_CYCLE_MON_SPRITE
+@@ -684,6 +762,8 @@ static void Task_EvolutionScene(u8 taskId)
+     case EVOSTATE_FADE_IN:
+         BeginNormalPaletteFade(PALETTES_ALL, 0, 0x10, 0, RGB_BLACK);
+         gSprites[sEvoStructPtr->preEvoSpriteId].invisible = FALSE;
++        if (gTasks[taskId].tFusionEvo)
++            gSprites[sEvoStructPtr->fusionMaterialSpriteId].invisible = FALSE;
+         gTasks[taskId].tState++;
+         ShowBg(0);
+         ShowBg(1);
+@@ -693,7 +773,10 @@ static void Task_EvolutionScene(u8 taskId)
+     case EVOSTATE_INTRO_MSG:
+         if (!gPaletteFade.active)
+         {
+-            StringExpandPlaceholders(gStringVar4, gText_PkmnIsEvolving);
++            if (gTasks[taskId].tFusionEvo)
++                StringExpandPlaceholders(gStringVar4, gText_PkmnAreFusing);
++            else
++                StringExpandPlaceholders(gStringVar4, gText_PkmnIsEvolving);
+             BattlePutTextOnWindow(gStringVar4, B_WIN_MSG);
+             gTasks[taskId].tState++;
+         }
+@@ -702,14 +785,19 @@ static void Task_EvolutionScene(u8 taskId)
+         if (!IsTextPrinterActive(0))
+         {
+             EvoScene_DoMonAnimAndCry(sEvoStructPtr->preEvoSpriteId, gTasks[taskId].tPreEvoSpecies);
++            if (gTasks[taskId].tFusionEvo)
++                DoMonFrontSpriteAnimation(&gSprites[sEvoStructPtr->fusionMaterialSpriteId], 
++                    GetMonData(mon2, MON_DATA_SPECIES), TRUE, 0);
+             gTasks[taskId].tState++;
+         }
+         break;
+     case EVOSTATE_INTRO_SOUND:
+-        if (EvoScene_IsMonAnimFinished(sEvoStructPtr->preEvoSpriteId))
++        if (EvoScene_IsMonAnimFinished(sEvoStructPtr->preEvoSpriteId) && 
++            (gTasks[taskId].tFusionEvo == FALSE || EvoScene_IsMonAnimFinished(sEvoStructPtr->fusionMaterialSpriteId))
++            )
+         {
+             PlaySE(MUS_EVOLUTION_INTRO);
+-            gTasks[taskId].tState++;
++            gTasks[taskId].tState ++;
+         }
+         break;
+     case EVOSTATE_START_MUSIC:
+@@ -740,7 +828,10 @@ static void Task_EvolutionScene(u8 taskId)
+     case EVOSTATE_CYCLE_MON_SPRITE: // launch task that flashes pre evo with post evo sprites
+         if (!gTasks[sEvoGraphicsTaskId].isActive)
+         {
+-            sEvoGraphicsTaskId = CycleEvolutionMonSprite(sEvoStructPtr->preEvoSpriteId, sEvoStructPtr->postEvoSpriteId);
++            if (gTasks[taskId].tFusionEvo)
++                 sEvoGraphicsTaskId = CycleFusionMonSprite(sEvoStructPtr->preEvoSpriteId, sEvoStructPtr->postEvoSpriteId, sEvoStructPtr->fusionMaterialSpriteId);
++            else
++                sEvoGraphicsTaskId = CycleEvolutionMonSprite(sEvoStructPtr->preEvoSpriteId, sEvoStructPtr->postEvoSpriteId);
+             gTasks[taskId].tState++;
+         }
+         break;
+@@ -791,7 +882,10 @@ static void Task_EvolutionScene(u8 taskId)
+         if (IsCryFinished())
+         {
+             u32 zero = 0;
+-            StringExpandPlaceholders(gStringVar4, gText_CongratsPkmnEvolved);
++            if (gTasks[taskId].tFusionEvo)
++                StringExpandPlaceholders(gStringVar4, gText_CongratsPkmnFused);
++            else
++                StringExpandPlaceholders(gStringVar4, gText_CongratsPkmnEvolved);
+             BattlePutTextOnWindow(gStringVar4, B_WIN_MSG);
+             PlayBGM(MUS_EVOLVED);
+             gTasks[taskId].tState++;
+@@ -861,7 +955,7 @@ static void Task_EvolutionScene(u8 taskId)
+         if (!gTasks[sEvoGraphicsTaskId].isActive)
+         {
+             m4aMPlayAllStop();
+-            BeginNormalPaletteFade(0x6001C, 0, 0x10, 0, RGB_WHITE);
++            BeginNormalPaletteFade(0xE001C, 0, 0x10, 0, RGB_WHITE);
+             gTasks[taskId].tState++;
+         }
+         break;
+@@ -869,14 +963,21 @@ static void Task_EvolutionScene(u8 taskId)
+         if (!gPaletteFade.active)
+         {
+             EvoScene_DoMonAnimAndCry(sEvoStructPtr->preEvoSpriteId, gTasks[taskId].tPreEvoSpecies);
++            if (gTasks[taskId].tFusionEvo)
++                DoMonFrontSpriteAnimation(&gSprites[sEvoStructPtr->fusionMaterialSpriteId], 
++                    GetMonData(mon2, MON_DATA_SPECIES), TRUE, 0);
+             gTasks[taskId].tState++;
+         }
+         break;
+     case EVOSTATE_CANCEL_MSG:
+-        if (EvoScene_IsMonAnimFinished(sEvoStructPtr->preEvoSpriteId))
++        if (EvoScene_IsMonAnimFinished(sEvoStructPtr->preEvoSpriteId) && 
++            (gTasks[taskId].tFusionEvo == FALSE || EvoScene_IsMonAnimFinished(sEvoStructPtr->fusionMaterialSpriteId))
++            )
+         {
+             if (gTasks[taskId].tEvoWasStopped) // FRLG auto cancellation
+                 StringExpandPlaceholders(gStringVar4, gText_EllipsisQuestionMark);
++            else if (gTasks[taskId].tFusionEvo)
++                StringExpandPlaceholders(gStringVar4, gText_PkmnStoppedFusing);
+             else
+                 StringExpandPlaceholders(gStringVar4, gText_PkmnStoppedEvolving);
+ 
+diff --git a/src/pokemon.c b/src/pokemon.c
+index 3f93ba7563..5b2e2f78b0 100644
+--- a/src/pokemon.c
++++ b/src/pokemon.c
+@@ -4804,6 +4804,7 @@ u32 GetEvolutionTargetSpecies(struct Pokemon *mon, enum EvolutionMode mode, u16
+     u32 holdEffect;
+     const struct Evolution *evolutions = GetSpeciesEvolutions(species);
+ 
++    mon->box.unused_1E = 0;
+     if (evolutions == NULL)
+         return SPECIES_NONE;
+ 
+@@ -4848,6 +4849,8 @@ u32 GetEvolutionTargetSpecies(struct Pokemon *mon, enum EvolutionMode mode, u16
+ 
+             if (conditionsMet && DoesMonMeetAdditionalConditions(mon, evolutions[i].params, NULL, PARTY_SIZE, canStopEvo, evoState))
+             {
++                if (evolutions[i].method == EVO_FUSE_TOGETHER)
++                    mon->box.unused_1E = 1;
+                 // All checks passed, so stop checking the rest of the evolutions.
+                 // This is different from vanilla where the loop continues.
+                 // If you have overlapping evolutions, put the ones you want to happen first on top of the list.
+-- 
+2.39.2 (Apple Git-143)
+
